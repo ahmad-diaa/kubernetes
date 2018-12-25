@@ -31,6 +31,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 	utiltesting "k8s.io/client-go/util/testing"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
+	"k8s.io/kubernetes/pkg/scheduler"
 	_ "k8s.io/kubernetes/pkg/scheduler/algorithmprovider/defaults"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	latestschedulerapi "k8s.io/kubernetes/pkg/scheduler/api/latest"
@@ -972,7 +973,7 @@ func TestCompatibility_v1_Scheduler(t *testing.T) {
 		client := clientset.NewForConfigOrDie(&restclient.Config{Host: server.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
 		informerFactory := informers.NewSharedInformerFactory(client, 0)
 
-		if _, err := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
+		if _, err := scheduler.NewConfigFactory(&factory.ConfigFactoryArgs{
 			SchedulerName:                  "some-scheduler-name",
 			Client:                         client,
 			NodeInformer:                   informerFactory.Core().V1().Nodes(),

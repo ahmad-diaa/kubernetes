@@ -36,7 +36,6 @@ import (
 	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
 	"k8s.io/client-go/informers"
 	clientsetfake "k8s.io/client-go/kubernetes/fake"
-	corelister "k8s.io/client-go/listers/core/v1"
 	clientcache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
@@ -82,14 +81,6 @@ func (fp fakePodPreemptor) SetNominatedNodeName(pod *v1.Pod, nomNodeName string)
 
 func (fp fakePodPreemptor) RemoveNominatedNodeName(pod *v1.Pod) error {
 	return nil
-}
-
-type nodeLister struct {
-	corelister.NodeLister
-}
-
-func (n *nodeLister) List() ([]*v1.Node, error) {
-	return n.NodeLister.List(labels.Everything())
 }
 
 func podWithID(id, desiredHost string) *v1.Pod {
@@ -756,7 +747,7 @@ func setupTestSchedulerWithVolumeBinding(fakeVolumeBinder *volumebinder.VolumeBi
 	s, bindingChan, errChan := setupTestScheduler(queuedPodStore, scache, informerFactory, predicateMap, recorder)
 	informerFactory.Start(stop)
 	informerFactory.WaitForCacheSync(stop)
-	s.config.VolumeBinder = fakeVolumeBinder
+	s.VolumeBinder = fakeVolumeBinder
 	return s, bindingChan, errChan
 }
 

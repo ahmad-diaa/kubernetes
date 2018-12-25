@@ -334,14 +334,14 @@ func newHealthzHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, s
 }
 
 // NewSchedulerConfig creates the scheduler configuration. This is exposed for use by tests.
-func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*factory.Config, error) {
+func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*Scheduler, error) {
 	var storageClassInformer storageinformers.StorageClassInformer
 	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeScheduling) {
 		storageClassInformer = s.InformerFactory.Storage().V1().StorageClasses()
 	}
 
 	// Set up the configurator which can create schedulers from configs.
-	configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
+	configurator := scheduler.NewConfigFactory(&factory.ConfigFactoryArgs{
 		SchedulerName:                  s.ComponentConfig.SchedulerName,
 		Client:                         s.Client,
 		NodeInformer:                   s.InformerFactory.Core().V1().Nodes(),
@@ -361,7 +361,7 @@ func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*factory.Confi
 	})
 
 	source := s.ComponentConfig.AlgorithmSource
-	var config *factory.Config
+	var sched *sched.Scheduler
 	switch {
 	case source.Provider != nil:
 		// Create the config from a named algorithm provider.
@@ -369,7 +369,7 @@ func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*factory.Confi
 		if err != nil {
 			return nil, fmt.Errorf("couldn't create scheduler using provider %q: %v", *source.Provider, err)
 		}
-		config = sc
+		sched = sc
 	case source.Policy != nil:
 		// Create the config from a user specified policy source.
 		policy := &schedulerapi.Policy{}
@@ -409,13 +409,13 @@ func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*factory.Confi
 		if err != nil {
 			return nil, fmt.Errorf("couldn't create scheduler from policy: %v", err)
 		}
-		config = sc
+		sched = sc
 	default:
 		return nil, fmt.Errorf("unsupported algorithm source: %v", source)
 	}
 	// Additional tweaks to the config produced by the configurator.
-	config.Recorder = s.Recorder
+	sched.Recorder = s.Recorder
 
-	config.DisablePreemption = s.ComponentConfig.DisablePreemption
-	return config, nil
+	sched.DisablePreemption = s.ComponentConfig.DisablePreemption
+	return sched, nil
 }

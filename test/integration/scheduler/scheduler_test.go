@@ -201,18 +201,18 @@ func TestSchedulerCreationFromConfigMap(t *testing.T) {
 			Broadcaster:     eventBroadcaster,
 		}
 
-		config, err := schedulerapp.NewSchedulerConfig(ss.Complete())
+		sched, err := schedulerapp.NewSchedulerConfig(ss.Complete())
 		if err != nil {
 			t.Fatalf("couldn't make scheduler config: %v", err)
 		}
 
 		// Verify that the config is applied correctly.
 		schedPredicates := sets.NewString()
-		for k := range config.Algorithm.Predicates() {
+		for k := range sched.Algorithm.Predicates() {
 			schedPredicates.Insert(k)
 		}
 		schedPrioritizers := sets.NewString()
-		for _, p := range config.Algorithm.Prioritizers() {
+		for _, p := range sched.Algorithm.Prioritizers() {
 			schedPrioritizers.Insert(p.Name)
 		}
 		if !schedPredicates.Equal(test.expectedPredicates) {

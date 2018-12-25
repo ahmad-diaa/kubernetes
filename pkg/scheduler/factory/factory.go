@@ -944,7 +944,7 @@ func (c *configFactory) GetPriorityFunctionConfigs(priorityKeys sets.String) ([]
 		return nil, err
 	}
 
-	return getPriorityFunctionConfigs(priorityKeys, *pluginArgs)
+	return GetPriorityFunctionConfigs(priorityKeys, *pluginArgs)
 }
 
 func (c *configFactory) GetPriorityMetadataProducer() (algorithm.PriorityMetadataProducer, error) {
@@ -953,7 +953,7 @@ func (c *configFactory) GetPriorityMetadataProducer() (algorithm.PriorityMetadat
 		return nil, err
 	}
 
-	return getPriorityMetadataProducer(*pluginArgs)
+	return GetPriorityMetadataProducer(*pluginArgs)
 }
 
 func (c *configFactory) GetPredicateMetadataProducer() (algorithm.PredicateMetadataProducer, error) {
@@ -961,7 +961,7 @@ func (c *configFactory) GetPredicateMetadataProducer() (algorithm.PredicateMetad
 	if err != nil {
 		return nil, err
 	}
-	return getPredicateMetadataProducer(*pluginArgs)
+	return GetPredicateMetadataProducer(*pluginArgs)
 }
 
 func (c *configFactory) GetPredicates(predicateKeys sets.String) (map[string]algorithm.FitPredicate, error) {
@@ -970,7 +970,7 @@ func (c *configFactory) GetPredicates(predicateKeys sets.String) (map[string]alg
 		return nil, err
 	}
 
-	return getFitPredicateFunctions(predicateKeys, *pluginArgs)
+	return GetFitPredicateFunctions(predicateKeys, *pluginArgs)
 }
 
 func (c *configFactory) getPluginArgs() (*PluginFactoryArgs, error) {

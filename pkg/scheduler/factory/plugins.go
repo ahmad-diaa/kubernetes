@@ -408,7 +408,7 @@ func GetAlgorithmProvider(name string) (*AlgorithmProviderConfig, error) {
 	return &provider, nil
 }
 
-func getFitPredicateFunctions(names sets.String, args PluginFactoryArgs) (map[string]algorithm.FitPredicate, error) {
+func GetFitPredicateFunctions(names sets.String, args PluginFactoryArgs) (map[string]algorithm.FitPredicate, error) {
 	schedulerFactoryMutex.Lock()
 	defer schedulerFactoryMutex.Unlock()
 
@@ -431,7 +431,7 @@ func getFitPredicateFunctions(names sets.String, args PluginFactoryArgs) (map[st
 	return predicates, nil
 }
 
-func getPriorityMetadataProducer(args PluginFactoryArgs) (algorithm.PriorityMetadataProducer, error) {
+func GetPriorityMetadataProducer(args PluginFactoryArgs) (algorithm.PriorityMetadataProducer, error) {
 	schedulerFactoryMutex.Lock()
 	defer schedulerFactoryMutex.Unlock()
 
@@ -441,7 +441,7 @@ func getPriorityMetadataProducer(args PluginFactoryArgs) (algorithm.PriorityMeta
 	return priorityMetadataProducer(args), nil
 }
 
-func getPredicateMetadataProducer(args PluginFactoryArgs) (algorithm.PredicateMetadataProducer, error) {
+func GetPredicateMetadataProducer(args PluginFactoryArgs) (algorithm.PredicateMetadataProducer, error) {
 	schedulerFactoryMutex.Lock()
 	defer schedulerFactoryMutex.Unlock()
 
@@ -451,7 +451,7 @@ func getPredicateMetadataProducer(args PluginFactoryArgs) (algorithm.PredicateMe
 	return predicateMetadataProducer(args), nil
 }
 
-func getPriorityFunctionConfigs(names sets.String, args PluginFactoryArgs) ([]algorithm.PriorityConfig, error) {
+func GetPriorityFunctionConfigs(names sets.String, args PluginFactoryArgs) ([]algorithm.PriorityConfig, error) {
 	schedulerFactoryMutex.Lock()
 	defer schedulerFactoryMutex.Unlock()
 
