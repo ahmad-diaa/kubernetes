@@ -25,6 +25,11 @@ import (
 	"os"
 	goruntime "runtime"
 
+	"net"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
+	apicorev1 "k8s.io/api/core/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -35,26 +40,28 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/apiserver/pkg/server/routes"
 	"k8s.io/apiserver/pkg/util/term"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/record"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
+	"k8s.io/klog"
 	schedulerserverconfig "k8s.io/kubernetes/cmd/kube-scheduler/app/config"
 	"k8s.io/kubernetes/cmd/kube-scheduler/app/options"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/kubernetes/pkg/scheduler"
 	"k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
 	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/util/configz"
 	utilflag "k8s.io/kubernetes/pkg/util/flag"
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/pkg/version/verflag"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spf13/cobra"
-	"k8s.io/klog"
 )
 
 // Option configures a framework.Registry.
@@ -129,16 +136,7 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options, regist
 		klog.Infof("Wrote configuration to: %s\n", opts.WriteConfigTo)
 	}
 
-	c, err := opts.Config()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
 	stopCh := make(chan struct{})
-	// Get the completed config
-	cc := c.Complete()
-
 	// To help debugging, immediately log version
 	klog.Infof("Version: %+v", version.Get())
 
@@ -146,18 +144,66 @@ func runCommand(cmd *cobra.Command, args []string, opts *options.Options, regist
 	// TODO: make configurable?
 	algorithmprovider.ApplyFeatureGates()
 
+	return Run(opts, stopCh, registryOptions...)
+}
+
+// Run executes the scheduler based on the given configuration. It only return on error or when stopCh is closed.
+func Run(o *options.Options, stopCh <-chan struct{}, registryOptions ...Option) error {
+	if o.SecureServing != nil {
+		if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	c := &schedulerserverconfig.Config{}
+	if err := o.ApplyTo(c); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// Prepare kube clients.
+	client, leaderElectionClient, eventClient, err := options.CreateClients(c.ComponentConfig.ClientConnection, o.Master, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// Prepare event clients.
+	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: eventClient.EventsV1beta1().Events("")})
+	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, c.ComponentConfig.SchedulerName)
+	leaderElectionBroadcaster := record.NewBroadcaster()
+	leaderElectionRecorder := leaderElectionBroadcaster.NewRecorder(scheme.Scheme, apicorev1.EventSource{Component: c.ComponentConfig.SchedulerName})
+
+	// Set up leader election if enabled.
+	var leaderElectionConfig *leaderelection.LeaderElectionConfig
+	if c.ComponentConfig.LeaderElection.LeaderElect {
+		leaderElectionConfig, err = options.MakeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, leaderElectionRecorder)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	c.Client = client
+	c.InformerFactory = informers.NewSharedInformerFactory(client, 0)
+	c.PodInformer = factory.NewPodInformer(client, 0)
+	c.EventClient = eventClient.EventsV1beta1()
+	c.CoreEventClient = eventClient.CoreV1()
+	c.Recorder = recorder
+	c.Broadcaster = eventBroadcaster
+	c.LeaderElectionBroadcaster = leaderElectionBroadcaster
+	c.LeaderElection = leaderElectionConfig
 	// Configz registration.
 	if cz, err := configz.New("componentconfig"); err == nil {
-		cz.Set(cc.ComponentConfig)
+		cz.Set(c.ComponentConfig)
 	} else {
 		return fmt.Errorf("unable to register configz: %s", err)
 	}
 
-	return Run(cc, stopCh, registryOptions...)
-}
+	// Get the completed config
+	cc := c.Complete()
 
-// Run executes the scheduler based on the given configuration. It only return on error or when stopCh is closed.
-func Run(cc schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}, registryOptions ...Option) error {
 	// To help debugging, immediately log version
 	klog.V(1).Infof("Starting Kubernetes Scheduler version %+v", version.Get())
 

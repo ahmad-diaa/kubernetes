@@ -23,18 +23,14 @@ import (
 	"strconv"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
@@ -48,7 +44,6 @@ import (
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	kubeschedulerscheme "k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/validation"
-	"k8s.io/kubernetes/pkg/scheduler/factory"
 )
 
 // Options has all the params needed to run a Scheduler
@@ -217,56 +212,9 @@ func (o *Options) Validate() []error {
 	return errs
 }
 
-// Config return a scheduler config object
-func (o *Options) Config() (*schedulerappconfig.Config, error) {
-	if o.SecureServing != nil {
-		if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
-			return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
-		}
-	}
-
-	c := &schedulerappconfig.Config{}
-	if err := o.ApplyTo(c); err != nil {
-		return nil, err
-	}
-
-	// Prepare kube clients.
-	client, leaderElectionClient, eventClient, err := createClients(c.ComponentConfig.ClientConnection, o.Master, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prepare event clients.
-	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: eventClient.EventsV1beta1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, c.ComponentConfig.SchedulerName)
-	leaderElectionBroadcaster := record.NewBroadcaster()
-	leaderElectionRecorder := leaderElectionBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: c.ComponentConfig.SchedulerName})
-
-	// Set up leader election if enabled.
-	var leaderElectionConfig *leaderelection.LeaderElectionConfig
-	if c.ComponentConfig.LeaderElection.LeaderElect {
-		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, leaderElectionRecorder)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	c.Client = client
-	c.InformerFactory = informers.NewSharedInformerFactory(client, 0)
-	c.PodInformer = factory.NewPodInformer(client, 0)
-	c.EventClient = eventClient.EventsV1beta1()
-	c.CoreEventClient = eventClient.CoreV1()
-	c.Recorder = recorder
-	c.Broadcaster = eventBroadcaster
-	c.LeaderElectionBroadcaster = leaderElectionBroadcaster
-	c.LeaderElection = leaderElectionConfig
-
-	return c, nil
-}
-
-// makeLeaderElectionConfig builds a leader election configuration. It will
+// MakeLeaderElectionConfig builds a leader election configuration. It will
 // create a new resource lock associated with the configuration.
-func makeLeaderElectionConfig(config kubeschedulerconfig.KubeSchedulerLeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder) (*leaderelection.LeaderElectionConfig, error) {
+func MakeLeaderElectionConfig(config kubeschedulerconfig.KubeSchedulerLeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder) (*leaderelection.LeaderElectionConfig, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
@@ -297,9 +245,9 @@ func makeLeaderElectionConfig(config kubeschedulerconfig.KubeSchedulerLeaderElec
 	}, nil
 }
 
-// createClients creates a kube client and an event client from the given config and masterOverride.
+// CreateClients creates a kube client and an event client from the given config and masterOverride.
 // TODO remove masterOverride when CLI flags are removed.
-func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface, clientset.Interface, clientset.Interface, error) {
+func CreateClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface, clientset.Interface, clientset.Interface, error) {
 	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
 		klog.Warningf("Neither --kubeconfig nor --master was specified. Using default API client. This might not work.")
 	}
